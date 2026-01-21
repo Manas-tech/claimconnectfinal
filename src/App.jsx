@@ -12,6 +12,7 @@ import LawyerDashboard from '@/pages/lawyer/LawyerDashboard';
 import Footer from '@/components/Footer'; // Import the new Footer component
 import { Toaster } from '@/components/ui/toaster';
 import { initializeStorage } from '@/lib/storage';
+import RecallsPage from '@/pages/RecallsPage';
 
 const AppContent = () => {
   const location = useLocation();
@@ -28,6 +29,7 @@ const AppContent = () => {
           <Route path="/settlements/:id" element={<SettlementDetailsPage />} />
           <Route path="/file-claim/:id" element={<ClaimFormPage />} />
           <Route path="/track-claims" element={<TrackingPage />} />
+          <Route path="/recalls" element={<RecallsPage />} />
 
           {/* Lawyer Routes */}
           <Route path="/lawyer/login" element={<LawyerLogin />} />

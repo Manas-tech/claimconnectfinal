@@ -9,6 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { getSettlements, saveSettlement } from '@/lib/storage';
 import { toast } from '@/components/ui/use-toast';
+import { supabase } from '@/lib/supabase';
+import { Loader2 } from 'lucide-react';
 
 const CaseManager = () => {
   const [cases, setCases] = useState([]);
@@ -24,14 +26,81 @@ const CaseManager = () => {
     estimatedPayout: '',
     proofOfPurchase: false,
   });
+  const [trackingCounts, setTrackingCounts] = useState({});
+  const [addingCaseId, setAddingCaseId] = useState(null);
 
   useEffect(() => {
     const loadCases = async () => {
       const data = await getSettlements();
       setCases(data);
+      await loadTrackingCounts();
     };
     loadCases();
   }, []);
+
+  const loadTrackingCounts = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('tracked_settlements')
+        .select('settlement_id');
+      if (error) throw error;
+
+      const counts = {};
+      (data || []).forEach((row) => {
+        const key = String(row.settlement_id);
+        counts[key] = (counts[key] || 0) + 1;
+      });
+      setTrackingCounts(counts);
+    } catch (err) {
+      console.error('Error loading tracking counts:', err);
+      setTrackingCounts({});
+    }
+  };
+
+  const handleAddToClaimReview = async (c) => {
+    try {
+      setAddingCaseId(c.id);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast({
+          title: "Authentication Required",
+          description: "Please log in again to add to claim review.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const { error } = await supabase.from('claim_review_queue').insert({
+        settlement_id: c.id,
+        settlement_name: c.name,
+        title: c.name,
+        category: c.category,
+        settlement_amount_total: c.amount,
+        claim_deadline_date: c.deadline,
+        case_number: c.caseNumber || c.case_number,
+        company: c.company,
+        estimated_payout: c.estimatedPayout,
+        proof_of_purchase: c.proofOfPurchase,
+        user_id: session.user.id,
+        status: 'Pending Review',
+      });
+      if (error) throw error;
+
+      toast({
+        title: "Added to Claim Review",
+        description: `${c.name} is now in the review queue.`,
+      });
+    } catch (err) {
+      console.error('Error adding to claim review:', err);
+      toast({
+        title: "Error",
+        description: err.message || "Failed to add to claim review.",
+        variant: "destructive",
+      });
+    } finally {
+      setAddingCaseId(null);
+    }
+  };
 
   const handleCreateCase = async () => {
     if (!newCase.name || !newCase.company) {
@@ -211,18 +280,31 @@ const CaseManager = () => {
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-1">
                       <Users className="h-3 w-3 text-slate-400" />
-                      {c.claimants}
+                      {trackingCounts[String(c.id)] ?? 0}
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    <Badge className={c.status === 'Active' ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-slate-100 text-slate-700'}>
-                      {c.status}
+                    <Badge className="bg-green-100 text-green-700 hover:bg-green-200">
+                      Active
                     </Badge>
                   </td>
                   <td className="px-6 py-4 text-right">
-                    <button className="text-slate-400 hover:text-slate-600">
-                      <MoreVertical className="h-4 w-4" />
-                    </button>
+                    <div className="flex justify-end">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                        onClick={() => handleAddToClaimReview(c)}
+                        disabled={addingCaseId === c.id}
+                      >
+                        {addingCaseId === c.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <FileText className="h-4 w-4 mr-2" />
+                        )}
+                        Add to Claim Review
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               ))}

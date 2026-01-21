@@ -23,17 +23,130 @@ import Analytics from '@/pages/lawyer/views/Analytics';
 import SettingsView from '@/pages/lawyer/views/Settings';
 
 const DashboardOverview = () => {
-  // Current Date: 2025-12-08
+  const [stats, setStats] = useState({
+    activeCases: 0,
+    casesAvailable: 25,
+    settlementValue: '$0',
+    totalClaimants: 0
+  });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadStats = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
+
+        // Load Active Cases (from claim_review_queue for this user)
+        const { data: claimReviewData, error: claimError } = await supabase
+          .from('claim_review_queue')
+          .select('id')
+          .eq('user_id', session.user.id);
+
+        if (claimError) throw claimError;
+
+        // Load all settlements to calculate totals
+        const { getSettlements } = await import('@/lib/storage');
+        const settlements = await getSettlements();
+
+        // Get tracking counts for all settlements
+        const { data: trackingData, error: trackingError } = await supabase
+          .from('tracked_settlements')
+          .select('settlement_id');
+
+        const trackingCounts = {};
+        if (!trackingError && trackingData) {
+          trackingData.forEach((row) => {
+            const key = String(row.settlement_id);
+            trackingCounts[key] = (trackingCounts[key] || 0) + 1;
+          });
+        }
+
+        // Calculate Settlement Value (sum of all amounts)
+        let totalValue = 0;
+        let totalClaimants = 0;
+
+        settlements.forEach(settlement => {
+          // Parse amount (e.g., "$125 Million" -> 125000000)
+          const amountStr = settlement.amount || settlement.settlement_amount_total || '';
+          const match = amountStr.match(/[\d.]+/);
+          if (match) {
+            const num = parseFloat(match[0]);
+            if (amountStr.toLowerCase().includes('billion') || amountStr.toLowerCase().includes('b')) {
+              totalValue += num * 1000000000;
+            } else if (amountStr.toLowerCase().includes('million') || amountStr.toLowerCase().includes('m')) {
+              totalValue += num * 1000000;
+            } else if (amountStr.toLowerCase().includes('thousand') || amountStr.toLowerCase().includes('k')) {
+              totalValue += num * 1000;
+            } else {
+              totalValue += num;
+            }
+          }
+
+          // Sum claimants from tracking counts
+          const settlementId = String(settlement.id);
+          totalClaimants += trackingCounts[settlementId] || 0;
+        });
+
+        // Format settlement value
+        let formattedValue = '$0';
+        if (totalValue >= 1000000000) {
+          formattedValue = `$${(totalValue / 1000000000).toFixed(1)}B`;
+        } else if (totalValue >= 1000000) {
+          formattedValue = `$${(totalValue / 1000000).toFixed(1)}M`;
+        } else if (totalValue >= 1000) {
+          formattedValue = `$${(totalValue / 1000).toFixed(1)}K`;
+        } else {
+          formattedValue = `$${totalValue.toLocaleString()}`;
+        }
+
+        // Format total claimants
+        let formattedClaimants = '0';
+        if (totalClaimants >= 1000000) {
+          formattedClaimants = `${(totalClaimants / 1000000).toFixed(1)}M`;
+        } else if (totalClaimants >= 1000) {
+          formattedClaimants = `${(totalClaimants / 1000).toFixed(1)}K`;
+        } else {
+          formattedClaimants = totalClaimants.toLocaleString();
+        }
+
+        setStats({
+          activeCases: claimReviewData?.length || 0,
+          casesAvailable: 25,
+          settlementValue: formattedValue,
+          totalClaimants: formattedClaimants
+        });
+      } catch (err) {
+        console.error('Error loading dashboard stats:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadStats();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <h2 className="text-2xl font-bold text-slate-900">Dashboard Overview</h2>
+        <div className="flex items-center justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold text-slate-900">Dashboard Overview</h2>
       
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {[
-          { label: 'Active Cases', value: '24', icon: Briefcase, color: 'text-blue-600', bg: 'bg-blue-50' },
-          { label: 'Pending Claims', value: '1,429', icon: Files, color: 'text-yellow-600', bg: 'bg-yellow-50' },
-          { label: 'Settlement Value', value: '$3.2B', icon: DollarSign, color: 'text-green-600', bg: 'bg-green-50' },
-          { label: 'Total Claimants', value: '8.5M', icon: Users, color: 'text-purple-600', bg: 'bg-purple-50' },
+          { label: 'Active Cases', value: stats.activeCases.toLocaleString(), icon: Briefcase, color: 'text-blue-600', bg: 'bg-blue-50' },
+          { label: 'Cases Available', value: stats.casesAvailable.toLocaleString(), icon: Files, color: 'text-yellow-600', bg: 'bg-yellow-50' },
+          { label: 'Settlement Value', value: stats.settlementValue, icon: DollarSign, color: 'text-green-600', bg: 'bg-green-50' },
+          { label: 'Total Claimants', value: stats.totalClaimants, icon: Users, color: 'text-purple-600', bg: 'bg-purple-50' },
         ].map((stat, i) => (
           <div key={i} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
             <div className="flex items-center justify-between mb-4">

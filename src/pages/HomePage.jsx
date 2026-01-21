@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Search, Zap, TrendingUp, ShieldCheck, Smartphone, ArrowRight, Apple, Play } from 'lucide-react';
+import { Search, Zap, TrendingUp, ShieldCheck, Smartphone, ArrowRight, Apple, Play, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { getSettlements } from '@/lib/storage';
 
@@ -231,6 +231,90 @@ const HomePage = () => {
           <div className="mt-8 text-center md:hidden">
             <Link to="/settlements">
               <Button size="lg" className="w-full bg-slate-900 text-white rounded-xl py-6">Browse All Settlements</Button>
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* Recalls Section */}
+      <section className="py-20 bg-gradient-to-br from-slate-50 to-blue-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-12">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-orange-100 text-orange-700 mb-4">
+              <AlertTriangle className="w-4 h-4" />
+              <span className="text-sm font-semibold">Important Updates</span>
+            </div>
+            <h2 className="text-4xl md:text-5xl font-black text-slate-900 mb-4">Product Recalls</h2>
+            <p className="text-lg text-slate-600 max-w-2xl mx-auto">
+              Stay informed about recent product recalls and safety notices that may affect you
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[
+              {
+                title: "Automotive Safety Recall",
+                category: "Vehicles",
+                date: "January 2025",
+                description: "Major automaker issues recall for airbag system in select models",
+                severity: "High"
+              },
+              {
+                title: "Consumer Electronics Recall",
+                category: "Electronics",
+                date: "December 2024",
+                description: "Battery safety issue prompts recall of popular smartphone models",
+                severity: "Medium"
+              },
+              {
+                title: "Food & Beverage Recall",
+                category: "Food Safety",
+                date: "January 2025",
+                description: "Contamination concerns lead to voluntary recall of packaged goods",
+                severity: "High"
+              }
+            ].map((recall, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: i * 0.1 }}
+                className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-lg transition-shadow"
+              >
+                <div className="flex items-start justify-between mb-4">
+                  <span className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">
+                    {recall.category}
+                  </span>
+                  <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                    recall.severity === 'High' 
+                      ? 'bg-red-100 text-red-700' 
+                      : 'bg-yellow-100 text-yellow-700'
+                  }`}>
+                    {recall.severity}
+                  </span>
+                </div>
+                <h3 className="text-xl font-bold text-slate-900 mb-2">{recall.title}</h3>
+                <p className="text-sm text-slate-600 mb-4 line-clamp-2">{recall.description}</p>
+                <div className="flex items-center justify-between pt-4 border-t border-slate-100">
+                  <span className="text-xs text-slate-500">{recall.date}</span>
+                  <Link to="/recalls">
+                    <Button variant="ghost" size="sm" className="text-blue-600 hover:text-blue-700">
+                      View Recall
+                      <ArrowRight className="ml-1 h-3 w-3" />
+                    </Button>
+                  </Link>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+
+          <div className="mt-8 text-center">
+            <Link to="/recalls">
+              <Button variant="outline" size="lg" className="border-slate-300 hover:bg-slate-50">
+                View All Recalls
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
             </Link>
           </div>
         </div>

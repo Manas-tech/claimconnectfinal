@@ -10,8 +10,11 @@ import { supabase } from '@/lib/supabase';
 
 const LawyerLogin = () => {
   const navigate = useNavigate();
+  const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [fullName, setFullName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
@@ -90,6 +93,70 @@ const LawyerLogin = () => {
     }
   };
 
+  const handleSignUp = async (e) => {
+    e.preventDefault();
+    
+    if (password !== confirmPassword) {
+      toast({
+        title: "Password Mismatch",
+        description: "Passwords do not match. Please try again.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (password.length < 6) {
+      toast({
+        title: "Password Too Short",
+        description: "Password must be at least 6 characters long.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: fullName,
+          },
+        },
+      });
+
+      if (error) throw error;
+
+      if (data.user) {
+        toast({
+          title: "Account Created",
+          description: "Please check your email to verify your account.",
+        });
+        // Optionally navigate to dashboard if email confirmation is disabled
+        if (data.session) {
+          navigate('/lawyer/dashboard');
+        } else {
+          // Reset form after successful signup
+          setEmail('');
+          setPassword('');
+          setConfirmPassword('');
+          setFullName('');
+          setIsSignUp(false);
+        }
+      }
+    } catch (error) {
+      toast({
+        title: "Sign Up Failed",
+        description: error.message || "Failed to create account. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <>
       <Helmet>
@@ -109,6 +176,33 @@ const LawyerLogin = () => {
           <p className="mt-2 text-center text-sm text-slate-600">
             Secure access for case management and claims processing
           </p>
+          
+          <div className="mt-4 flex justify-center">
+            <div className="bg-white rounded-lg p-1 border border-slate-200 inline-flex">
+              <button
+                type="button"
+                onClick={() => setIsSignUp(false)}
+                className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                  !isSignUp
+                    ? 'bg-slate-900 text-white'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Sign In
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsSignUp(true)}
+                className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                  isSignUp
+                    ? 'bg-slate-900 text-white'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Create Account
+              </button>
+            </div>
+          </div>
         </div>
 
         <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
@@ -162,7 +256,26 @@ const LawyerLogin = () => {
               </div>
             </div>
 
-            <form className="space-y-6 mt-6" onSubmit={handleLogin}>
+            <form className="space-y-6 mt-6" onSubmit={isSignUp ? handleSignUp : handleLogin}>
+              {isSignUp && (
+                <div>
+                  <Label htmlFor="fullName">Full Name</Label>
+                  <div className="mt-1">
+                    <Input
+                      id="fullName"
+                      name="fullName"
+                      type="text"
+                      autoComplete="name"
+                      required
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      className="h-11"
+                      placeholder="John Doe"
+                    />
+                  </div>
+                </div>
+              )}
+
               <div>
                 <Label htmlFor="email">Work Email</Label>
                 <div className="mt-1">
@@ -187,34 +300,56 @@ const LawyerLogin = () => {
                     id="password"
                     name="password"
                     type="password"
-                    autoComplete="current-password"
+                    autoComplete={isSignUp ? "new-password" : "current-password"}
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="h-11"
+                    placeholder={isSignUp ? "Minimum 6 characters" : ""}
                   />
                 </div>
               </div>
 
-              <div className="flex items-center justify-between">
-                <div className="flex items-center">
-                  <input
-                    id="remember-me"
-                    name="remember-me"
-                    type="checkbox"
-                    className="h-4 w-4 text-slate-900 focus:ring-slate-900 border-slate-300 rounded"
-                  />
-                  <label htmlFor="remember-me" className="ml-2 block text-sm text-slate-900">
-                    Remember me
-                  </label>
+              {isSignUp && (
+                <div>
+                  <Label htmlFor="confirmPassword">Confirm Password</Label>
+                  <div className="mt-1">
+                    <Input
+                      id="confirmPassword"
+                      name="confirmPassword"
+                      type="password"
+                      autoComplete="new-password"
+                      required
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      className="h-11"
+                      placeholder="Re-enter your password"
+                    />
+                  </div>
                 </div>
+              )}
 
-                <div className="text-sm">
-                  <a href="#" className="font-medium text-slate-900 hover:text-slate-700">
-                    Forgot your password?
-                  </a>
+              {!isSignUp && (
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center">
+                    <input
+                      id="remember-me"
+                      name="remember-me"
+                      type="checkbox"
+                      className="h-4 w-4 text-slate-900 focus:ring-slate-900 border-slate-300 rounded"
+                    />
+                    <label htmlFor="remember-me" className="ml-2 block text-sm text-slate-900">
+                      Remember me
+                    </label>
+                  </div>
+
+                  <div className="text-sm">
+                    <a href="#" className="font-medium text-slate-900 hover:text-slate-700">
+                      Forgot your password?
+                    </a>
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div>
                 <Button
@@ -223,10 +358,10 @@ const LawyerLogin = () => {
                   className="w-full h-11 bg-slate-900 hover:bg-slate-800 text-white font-medium"
                 >
                   {isLoading ? (
-                    "Authenticating..."
+                    isSignUp ? "Creating Account..." : "Authenticating..."
                   ) : (
                     <span className="flex items-center">
-                      Sign In <ArrowRight className="ml-2 h-4 w-4" />
+                      {isSignUp ? "Create Account" : "Sign In"} <ArrowRight className="ml-2 h-4 w-4" />
                     </span>
                   )}
                 </Button>
