@@ -12,10 +12,17 @@ import {
   Search,
   Users,
   DollarSign,
-  Gavel
+  Gavel,
+  Plus
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { toast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/supabase';
 import CaseManager from '@/pages/lawyer/views/CaseManager';
 import ClaimReview from '@/pages/lawyer/views/ClaimReview';
@@ -30,6 +37,14 @@ const DashboardOverview = () => {
     totalClaimants: 0
   });
   const [loading, setLoading] = useState(true);
+  const [isNotificationDialogOpen, setIsNotificationDialogOpen] = useState(false);
+  const [notificationForm, setNotificationForm] = useState({
+    notification: '',
+    notificationDetails: '',
+    recipientType: '',
+    noOfApplicants: ''
+  });
+  const [isSendingNotification, setIsSendingNotification] = useState(false);
 
   useEffect(() => {
     const loadStats = async () => {
@@ -137,9 +152,100 @@ const DashboardOverview = () => {
     );
   }
 
+  const handleNotificationSubmit = async (e) => {
+    e.preventDefault();
+    setIsSendingNotification(true);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast({
+          title: "Error",
+          description: "You must be logged in to send notifications.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Fetch emails from email_database
+      const { data: emailData, error: emailError } = await supabase
+        .from('email_database')
+        .select('email, name')
+        .eq('user_id', session.user.id);
+
+      if (emailError) throw emailError;
+
+      if (!emailData || emailData.length === 0) {
+        toast({
+          title: "No Emails Found",
+          description: "Please add emails to your database first.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const recipients = emailData.map(item => ({
+        email: item.email,
+        name: item.name || 'Valued Client'
+      }));
+
+      // Send notification via API
+      const response = await fetch('/api/send-notification', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          notification: notificationForm.notification,
+          notificationDetails: notificationForm.notificationDetails,
+          recipientType: notificationForm.recipientType,
+          noOfApplicants: notificationForm.noOfApplicants,
+          userId: session.user.id,
+          recipients: recipients,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        let errorData;
+        try {
+          errorData = JSON.parse(errorText);
+        } catch {
+          errorData = { error: errorText || 'Failed to send notifications' };
+        }
+        throw new Error(errorData.error || 'Failed to send notifications');
+      }
+
+      const result = await response.json();
+
+      toast({
+        title: "Success",
+        description: result.message || `Notification sent to ${result.successful} recipient(s).`,
+      });
+
+      setIsNotificationDialogOpen(false);
+      setNotificationForm({ notification: '', notificationDetails: '', recipientType: '', noOfApplicants: '' });
+    } catch (err) {
+      console.error('Error sending notification:', err);
+      toast({
+        title: "Error",
+        description: err.message || "Failed to send notification emails.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSendingNotification(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-slate-900">Dashboard Overview</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold text-slate-900">Dashboard Overview</h2>
+        <Button onClick={() => setIsNotificationDialogOpen(true)} className="flex items-center gap-2">
+          <Plus className="h-4 w-4" />
+          Create Notification
+        </Button>
+      </div>
       
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {[
@@ -212,6 +318,77 @@ const DashboardOverview = () => {
           </div>
         </div>
       </div>
+
+      {/* Create Notification Dialog */}
+      <Dialog open={isNotificationDialogOpen} onOpenChange={setIsNotificationDialogOpen}>
+        <DialogContent className="sm:max-w-lg bg-white border border-slate-200">
+          <DialogHeader>
+            <DialogTitle>Create Notification</DialogTitle>
+            <DialogDescription>
+              Send a notification to your selected recipients
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleNotificationSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="notification">Notification</Label>
+              <Input
+                id="notification"
+                placeholder="Enter notification title"
+                value={notificationForm.notification}
+                onChange={(e) => setNotificationForm({ ...notificationForm, notification: e.target.value })}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="notificationDetails">Notification Details</Label>
+              <Textarea
+                id="notificationDetails"
+                placeholder="Enter notification details"
+                value={notificationForm.notificationDetails}
+                onChange={(e) => setNotificationForm({ ...notificationForm, notificationDetails: e.target.value })}
+                rows={4}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="recipientType">Recipient Type</Label>
+              <Select
+                value={notificationForm.recipientType}
+                onValueChange={(value) => setNotificationForm({ ...notificationForm, recipientType: value })}
+                required
+              >
+                <SelectTrigger id="recipientType">
+                  <SelectValue placeholder="Select recipient type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="consumer database">Consumer Database</SelectItem>
+                  <SelectItem value="email list">Email List</SelectItem>
+                  <SelectItem value="no. of applicants">No. of Applicants</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="noOfApplicants">No. of Applicants</Label>
+              <Input
+                id="noOfApplicants"
+                type="number"
+                placeholder="Enter number of applicants"
+                value={notificationForm.noOfApplicants}
+                onChange={(e) => setNotificationForm({ ...notificationForm, noOfApplicants: e.target.value })}
+                min="0"
+              />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsNotificationDialogOpen(false)} disabled={isSendingNotification}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isSendingNotification}>
+                {isSendingNotification ? 'Sending...' : 'Create Notification'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

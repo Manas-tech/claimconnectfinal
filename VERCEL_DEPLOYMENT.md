@@ -16,6 +16,8 @@
 ```
 VITE_SUPABASE_URL=your_supabase_project_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+EMAIL_USER=manasparwani397@gmail.com
+EMAIL_PASSWORD=cfun kbct fclz ujsa
 ```
 
 **Important:** Make sure to add these for **Production**, **Preview**, and **Development** environments.
@@ -34,11 +36,14 @@ After deploying, note your production domain (e.g., `your-app.vercel.app`)
 3. Navigate to **APIs & Services** → **Credentials**
 4. Find your OAuth 2.0 Client ID (the one used by Supabase)
 5. Click **Edit**
-6. Under **Authorized redirect URIs**, add:
+6. Under **Authorized redirect URIs**, add these exact URLs (one per line):
    ```
-   https://your-app.vercel.app/auth/v1/callback
-   https://your-app.vercel.app/lawyer/dashboard
+   https://claimconnectfinal.vercel.app/auth/v1/callback
+   https://claimconnectfinal.vercel.app/lawyer/dashboard
+   https://claimconnectfinal.vercel.app/track-claims
    ```
+   **Important:** The `/auth/v1/callback` URL is required by Supabase for OAuth flow.
+   
    Also add for preview deployments (optional):
    ```
    https://*.vercel.app/auth/v1/callback
@@ -59,18 +64,29 @@ After deploying, note your production domain (e.g., `your-app.vercel.app`)
    - **Client Secret** from Google Cloud Console
 6. Save the configuration
 
-## Step 4: Configure Supabase Redirect URLs
+## Step 4: Configure Supabase Redirect URLs (CRITICAL - Fixes localhost redirect issue)
+
+**⚠️ IMPORTANT:** This is the most common cause of OAuth redirecting to localhost!
 
 1. In Supabase Dashboard, navigate to **Authentication** → **URL Configuration**
-2. Under **Redirect URLs**, add:
+2. Under **Site URL** (at the top), **REPLACE** `http://localhost:3000` with:
    ```
-   https://your-app.vercel.app/lawyer/dashboard
-   https://your-app.vercel.app/**
+   https://claimconnectfinal.vercel.app
    ```
-3. Under **Site URL**, set:
+   **This is the PRIMARY fix for the localhost redirect issue!**
+3. Under **Redirect URLs**, add these URLs (one per line):
    ```
-   https://your-app.vercel.app
+   https://claimconnectfinal.vercel.app/lawyer/dashboard
+   https://claimconnectfinal.vercel.app/track-claims
+   https://claimconnectfinal.vercel.app/**
    ```
+   **Note:** The `/**` wildcard allows all paths under your domain.
+
+4. **Remove** any localhost URLs from the Redirect URLs list if they exist:
+   - ❌ Remove: `http://localhost:3000/**`
+   - ❌ Remove: `http://localhost:3000/lawyer/dashboard`
+
+5. Click **Save** at the bottom of the page
 
 ---
 
@@ -126,19 +142,38 @@ After deployment:
 
 ## Troubleshooting
 
+### ❌ OAuth redirects to `localhost:3000` instead of Vercel URL?
+
+**This is the #1 most common issue!** Fix it by:
+
+1. **Go to Supabase Dashboard** → **Authentication** → **URL Configuration**
+2. **Change Site URL** from `http://localhost:3000` to `https://claimconnectfinal.vercel.app`
+3. **Add Redirect URLs** (if not already added):
+   - `https://claimconnectfinal.vercel.app/lawyer/dashboard`
+   - `https://claimconnectfinal.vercel.app/track-claims`
+   - `https://claimconnectfinal.vercel.app/**`
+4. **Remove** any localhost URLs from Redirect URLs
+5. **Save** and wait 1-2 minutes for changes to propagate
+6. **Clear browser cache** and try again
+
+**Why this happens:** Supabase uses the Site URL as the default redirect destination. If it's set to localhost, OAuth will always redirect there.
+
 ### Google OAuth not working?
 - Check that redirect URIs in Google Console match exactly (including `https://`)
 - Verify Supabase redirect URLs include your production domain
 - Check browser console for errors
+- Ensure Google OAuth is enabled in Supabase → Authentication → Providers
 
 ### Environment variables not loading?
 - Ensure variables are prefixed with `VITE_` (required for Vite)
 - Redeploy after adding new environment variables
 - Check Vercel build logs for errors
+- Verify variables are set for the correct environment (Production/Preview/Development)
 
 ### Redirect loop?
-- Verify `Site URL` in Supabase matches your Vercel domain
+- Verify `Site URL` in Supabase matches your Vercel domain exactly
 - Check that redirect URLs don't have trailing slashes
+- Ensure the redirect URL in code matches what's configured in Supabase
 
 ---
 
