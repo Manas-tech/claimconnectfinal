@@ -147,6 +147,27 @@ const SettlementDetailsPage = () => {
         });
         if (error) throw error;
 
+        // Log activity for lawyer dashboard
+        const { error: activityError } = await supabase
+          .from('activity_logs')
+          .insert({
+            user_id: session.user.id,
+            activity_type: 'settlement_tracked',
+            activity_title: `Settlement tracking initiated: ${settlement.name}`,
+            activity_description: `User initiated tracking for settlement ID: ${settlement.id}. Company: ${settlement.company || 'N/A'}. Estimated payout: ${settlement.estimatedPayout || 'N/A'}. Proof of purchase required: ${settlement.proofOfPurchase ? 'Yes' : 'No'}.`,
+            metadata: {
+              settlement_id: settlement.id,
+              settlement_name: settlement.name,
+              company: settlement.company,
+              amount: settlement.amount,
+              estimated_payout: settlement.estimatedPayout
+            }
+          });
+
+        if (activityError) {
+          console.error('Error logging activity:', activityError);
+        }
+
         setIsTracking(true);
         await fetchTrackingCount(session.user.id);
         toast({

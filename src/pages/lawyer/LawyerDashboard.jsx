@@ -45,12 +45,49 @@ const DashboardOverview = () => {
     noOfApplicants: ''
   });
   const [isSendingNotification, setIsSendingNotification] = useState(false);
+  const [recentActivities, setRecentActivities] = useState([]);
+
+  // Format time ago helper
+  const formatTimeAgo = (timestamp) => {
+    const now = new Date();
+    const time = new Date(timestamp);
+    const diffInSeconds = Math.floor((now - time) / 1000);
+    
+    if (diffInSeconds < 60) return `${diffInSeconds} second${diffInSeconds !== 1 ? 's' : ''} ago`;
+    const diffInMinutes = Math.floor(diffInSeconds / 60);
+    if (diffInMinutes < 60) return `${diffInMinutes} minute${diffInMinutes !== 1 ? 's' : ''} ago`;
+    const diffInHours = Math.floor(diffInMinutes / 60);
+    if (diffInHours < 24) return `${diffInHours} hour${diffInHours !== 1 ? 's' : ''} ago`;
+    const diffInDays = Math.floor(diffInHours / 24);
+    if (diffInDays < 7) return `${diffInDays} day${diffInDays !== 1 ? 's' : ''} ago`;
+    const diffInWeeks = Math.floor(diffInDays / 7);
+    return `${diffInWeeks} week${diffInWeeks !== 1 ? 's' : ''} ago`;
+  };
+
+  // Load activities
+  const loadActivities = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('activity_logs')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (error) throw error;
+      setRecentActivities(data || []);
+    } catch (err) {
+      console.error('Error loading activities:', err);
+    }
+  };
 
   useEffect(() => {
     const loadStats = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return;
+
+        // Load activities
+        await loadActivities();
 
         // Load Active Cases (from claim_review_queue for this user)
         const { data: claimReviewData, error: claimError } = await supabase
@@ -139,6 +176,26 @@ const DashboardOverview = () => {
     };
 
     loadStats();
+
+    // Set up real-time subscription for activity logs
+    const channel = supabase
+      .channel('activity_logs_channel')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'activity_logs'
+        },
+        (payload) => {
+          setRecentActivities((prev) => [payload.new, ...prev].slice(0, 10));
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   if (loading) {
@@ -218,6 +275,26 @@ const DashboardOverview = () => {
 
       const result = await response.json();
 
+      // Log activity
+      const { error: activityError } = await supabase
+        .from('activity_logs')
+        .insert({
+          user_id: session.user.id,
+          activity_type: 'notification_created',
+          activity_title: `Notification broadcast initiated: ${notificationForm.notification}`,
+          activity_description: `Notification payload dispatched to ${result.successful} recipient(s) via SMTP gateway. Recipient type: ${notificationForm.recipientType || 'N/A'}. Notification details: ${notificationForm.notificationDetails.substring(0, 100)}${notificationForm.notificationDetails.length > 100 ? '...' : ''}`,
+          metadata: {
+            notification: notificationForm.notification,
+            recipientCount: result.successful,
+            recipientType: notificationForm.recipientType,
+            noOfApplicants: notificationForm.noOfApplicants
+          }
+        });
+
+      if (activityError) {
+        console.error('Error logging activity:', activityError);
+      }
+
       toast({
         title: "Success",
         description: result.message || `Notification sent to ${result.successful} recipient(s).`,
@@ -270,18 +347,34 @@ const DashboardOverview = () => {
       <div className="grid lg:grid-cols-2 gap-6">
         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
           <h3 className="text-lg font-semibold text-slate-900 mb-4">Recent Activity</h3>
-          <div className="space-y-4">
-            {[1,2,3,4,5].map((i) => (
-              <div key={i} className="flex items-start gap-3 pb-3 border-b border-slate-100 last:border-0 last:pb-0">
-                <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0 text-slate-500 font-medium text-xs">
-                  JD
-                </div>
-                <div>
-                  <p className="text-sm text-slate-900"><span className="font-semibold">John Doe</span> submitted a claim for <span className="font-semibold">TechCorp Settlement</span></p>
-                  <p className="text-xs text-slate-400">2 minutes ago</p>
-                </div>
+          <div className="space-y-4 max-h-[500px] overflow-y-auto">
+            {recentActivities.length === 0 ? (
+              <div className="text-center py-8 text-slate-400 text-sm">
+                No recent activity
               </div>
-            ))}
+            ) : (
+              recentActivities.map((activity) => {
+                const isNotification = activity.activity_type === 'notification_created';
+                const iconBg = isNotification ? 'bg-blue-100' : 'bg-violet-100';
+                const iconColor = isNotification ? 'text-blue-600' : 'text-violet-600';
+                const Icon = isNotification ? Bell : Gavel;
+                
+                return (
+                  <div key={activity.id} className="flex items-start gap-3 pb-3 border-b border-slate-100 last:border-0 last:pb-0">
+                    <div className={`w-8 h-8 rounded-full ${iconBg} flex items-center justify-center flex-shrink-0`}>
+                      <Icon className={`h-4 w-4 ${iconColor}`} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-slate-900 font-medium">{activity.activity_title}</p>
+                      {activity.activity_description && (
+                        <p className="text-xs text-slate-600 mt-1">{activity.activity_description}</p>
+                      )}
+                      <p className="text-xs text-slate-400 mt-1">{formatTimeAgo(activity.created_at)}</p>
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
 
